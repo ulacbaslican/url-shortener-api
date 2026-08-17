@@ -1,7 +1,13 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 from contextlib import asynccontextmanager
+import os
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import RedirectResponse
+from loguru import logger
+import sentry_sdk
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -13,12 +19,22 @@ from schemas import URLCreate, URLResponse, URLStats
 from shortener import create_short_url, get_url_by_code, increment_click
 
 
+sentry_dsn = os.getenv("SENTRY_DSN")
+if sentry_dsn:
+	sentry_sdk.init(
+		dsn=sentry_dsn,
+		traces_sample_rate=1.0,
+		environment=os.getenv("ENV", "development"),
+	)
+
+
 limiter = Limiter(key_func=get_remote_address)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
 	Base.metadata.create_all(bind=engine)
+	logger.info("Application started")
 	yield
 
 
@@ -37,6 +53,7 @@ def shorten_url(
 ):
 	del request
 	url_record = create_short_url(db, url_data.original_url, url_data.custom_code)
+	logger.info("URL shortened: {short_code}", short_code=url_record.short_code)
 	return URLResponse(
 		short_code=url_record.short_code,
 		original_url=url_record.original_url,
@@ -69,5 +86,6 @@ def deactivate_url(short_code: str, db: Session = Depends(get_db)):
 @app.get("/{short_code}", response_class=RedirectResponse, tags=["Redirect"])
 def redirect_to_original(short_code: str, db: Session = Depends(get_db)):
 	url_record = get_url_by_code(db, short_code)
+	logger.info("Redirect: {short_code}", short_code=short_code)
 	increment_click(db, url_record)
 	return RedirectResponse(url=url_record.original_url, status_code=302)
