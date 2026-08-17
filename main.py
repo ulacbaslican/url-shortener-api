@@ -3,6 +3,7 @@ load_dotenv()
 
 from contextlib import asynccontextmanager
 import os
+import redis
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import RedirectResponse
@@ -34,6 +35,13 @@ limiter = Limiter(key_func=get_remote_address)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
 	Base.metadata.create_all(bind=engine)
+	try:
+		redis_client = redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379"))
+		redis_client.ping()
+		app.state.redis = redis_client
+	except Exception as exc:
+		app.state.redis = None
+		logger.warning("Redis unavailable: {error}", error=exc)
 	logger.info("Application started")
 	yield
 
@@ -84,8 +92,9 @@ def deactivate_url(short_code: str, db: Session = Depends(get_db)):
 
 
 @app.get("/{short_code}", response_class=RedirectResponse, tags=["Redirect"])
-def redirect_to_original(short_code: str, db: Session = Depends(get_db)):
-	url_record = get_url_by_code(db, short_code)
+def redirect_to_original(request: Request, short_code: str, db: Session = Depends(get_db)):
+	url_record = get_url_by_code(db, short_code, redis_client=request.app.state.redis)
 	logger.info("Redirect: {short_code}", short_code=short_code)
-	increment_click(db, url_record)
+	if hasattr(url_record, "id") and url_record.id is not None:
+		increment_click(db, url_record)
 	return RedirectResponse(url=url_record.original_url, status_code=302)

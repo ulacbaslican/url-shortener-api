@@ -1,12 +1,21 @@
 services:
   api:
     build: .
+    depends_on:
+      - redis
     ports:
       - "8000:8000"
     environment:
       DATABASE_URL: sqlite:////app/data/urls.db
+      REDIS_URL: redis://redis:6379
     volumes:
       - db_data:/app/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
     restart: unless-stopped
 
 volumes:
