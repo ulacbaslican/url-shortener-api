@@ -69,8 +69,8 @@ def shorten_url(
 ):
     url_record = create_short_url(db, url_data.original_url, url_data.custom_code)
     logger.info("URL shortened: {short_code}", short_code=url_record.short_code)
-    logger.info("Queue available: {q}", q=app.state.queue is not None)
-    queue = app.state.queue
+    logger.info("Queue available: {q}", q=getattr(app.state, "queue", None) is not None)
+    queue = getattr(app.state, "queue", None)
     if queue is not None:
         try:
             queue.enqueue(
