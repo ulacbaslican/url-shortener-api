@@ -18,5 +18,12 @@ services:
       - "6379:6379"
     restart: unless-stopped
 
+  worker:
+    build: .
+    command: rq worker --url redis://redis:6379
+    depends_on:
+      - redis
+    restart: unless-stopped
+
 volumes:
   db_data:
