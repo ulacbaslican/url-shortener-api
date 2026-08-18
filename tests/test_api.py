@@ -25,6 +25,8 @@ def override_database_dependency():
 		finally:
 			db.close()
 
+	app.state.queue = None
+	app.state.redis = None
 	app.dependency_overrides[get_db] = override_get_db
 	yield
 	app.dependency_overrides.clear()
